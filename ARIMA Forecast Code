@@ -1,0 +1,67 @@
+import pandas as pd
+import numpy as np
+from statsmodels.tsa.arima.model import ARIMA
+from matplotlib import pyplot as plt
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from math import sqrt
+
+# Load the dataset
+file_path = '/Applications/Quant /CarSharing_preprocessed.csv'  # Replace with your actual file path
+data = pd.read_csv(file_path)
+
+# Ensure the timestamp column is a datetime type and set it as the index
+data['timestamp'] = pd.to_datetime(data['timestamp'])
+data.set_index('timestamp', inplace=True)
+
+# Check for missing values and interpolate if necessary
+if data['demand'].isnull().any():
+    data['demand'] = data['demand'].interpolate()
+
+# Resample to get weekly average demand
+weekly_data = data['demand'].resample('W').mean().interpolate()
+
+# Split into train and test sets
+split_point = int(len(weekly_data) * 0.7)
+train, test = weekly_data[:split_point], weekly_data[split_point:]
+
+# Fit ARIMA model
+model = ARIMA(train, order=(2,1,2))
+model_fit = model.fit()
+
+# Forecast
+forecast = model_fit.get_forecast(steps=len(test))
+forecast_mean = forecast.predicted_mean
+conf_int = forecast.conf_int()
+
+# Calculate error metrics
+mse = mean_squared_error(test, forecast_mean)
+rmse = sqrt(mse)
+mae = mean_absolute_error(test, forecast_mean)
+
+# Plot the results
+plt.figure(figsize=(12, 6))
+plt.plot(train.index, train, label='Train', color='blue')
+plt.plot(test.index, test, label='Test', color='orange')
+plt.plot(test.index, forecast_mean, label='Forecast', color='green', linestyle='-')
+plt.fill_between(test.index, conf_int.iloc[:, 0], conf_int.iloc[:, 1], color='pink', alpha=0.3, label='Confidence Interval')
+
+# Set labels and title
+plt.xlabel('Date')
+plt.ylabel('Average Demand')
+plt.title('Weekly Average Demand Forecast')
+
+# Move legend to top left
+plt.legend(loc='upper left')
+
+# Place error metrics text in the top left corner, inside the plot area
+plt.text(0.99, 0.03, f'MSE: {mse:.2f}\nRMSE: {rmse:.2f}\nMAE: {mae:.2f}', 
+         transform=plt.gca().transAxes, fontsize=10, 
+         verticalalignment='top', horizontalalignment='left')
+
+# Show plot
+plt.show()
+
+# Print error metrics to the console
+print(f'MSE: {mse:.2f}')
+print(f'RMSE: {rmse:.2f}')
+print(f'MAE: {mae:.2f}')
